@@ -1,65 +1,72 @@
-name: compile
+name: emscripten-build
 
 on:
   push:
+    branches:
+      - emscripten
   pull_request:
+    branches:
+      - emscripten
   workflow_dispatch:
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-24.04
+  build:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
 
-      - name: Install system packages
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential \
-            clang \
-            lld \
+            git \
             cmake \
-            pkg-config \
-            python3 \
-            python3-pip \
-            unzip \
-            libsdl2-dev \
-            libgl-dev \
-            libglu1-mesa-dev \
-            libpthread-stubs0-dev \
-            libssl-dev \
-            zlib1g-dev
+            ninja-build \
+            build-essential
 
-      - name: Install Meson and Ninja
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install --upgrade meson ninja
+          python -m pip install --upgrade pip
+          python -m pip install meson
 
-      - name: Show tool versions
+      - name: Install Emscripten
         run: |
-          meson --version
-          ninja --version
-          clang --version
-          pkg-config --version
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+
+          ./emsdk install latest
+          ./emsdk activate latest
+
+          echo "$PWD" >> $GITHUB_PATH
+          echo "$PWD/upstream/emscripten" >> $GITHUB_PATH
 
       - name: Configure
-        env:
-          CC: clang
-          CXX: clang++
         run: |
-          meson setup build --wrap-mode=default
+          source emsdk/emsdk_env.sh
+
+          emcc -v
+
+          meson setup build \
+            --cross-file emscripten
 
       - name: Build
-        run: meson compile -C build -j"$(nproc)"
+        run: |
+          source emsdk/emsdk_env.sh
+          meson compile -C build
 
-      - name: Upload build artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 4jcraft-linux-build
-          path: build/Minecraft.Client/
-          if-no-files-found: error
+          name: emscripten-build
+          path: |
+            build/**/*.html
+            build/**/*.js
+            build/**/*.wasm
+            build/**/*.data
