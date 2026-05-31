@@ -1,0 +1,65 @@
+name: compile
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            lld \
+            cmake \
+            pkg-config \
+            python3 \
+            python3-pip \
+            unzip \
+            libsdl2-dev \
+            libgl-dev \
+            libglu1-mesa-dev \
+            libpthread-stubs0-dev \
+            libssl-dev \
+            zlib1g-dev
+
+      - name: Install Meson and Ninja
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade meson ninja
+
+      - name: Show tool versions
+        run: |
+          meson --version
+          ninja --version
+          clang --version
+          pkg-config --version
+
+      - name: Configure
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          meson setup build --wrap-mode=default
+
+      - name: Build
+        run: meson compile -C build -j"$(nproc)"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 4jcraft-linux-build
+          path: build/Minecraft.Client/
+          if-no-files-found: error
